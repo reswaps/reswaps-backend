@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model transactions {
+  id                String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  hash              String
+  blockNumber       Int
+  transactionIndex  Int
+  date              DateTime      @db.Timestamptz(6)
+  traderId          String        @db.Uuid
+  from              String
+  to                String
+  value             String
+  logs              Json[]
+  gasUsed           String
+  internalTxs       Json[]
+  isFailed          Boolean
+  lastUpdatedBlock  Int?
+
+  operation         operations?
+  trader            traders       @relation(fields: [traderId], references: [id])
+}
+
+model operations {
+  id                  String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  traderId            String          @db.Uuid
+  operationType       String
+  txId                String          @unique @db.Uuid
+  transfers           Json[]
+  portfolio           Json
+  createdAt           DateTime        @default(now()) @db.Timestamptz(6)
+  blockNumber         Int
+  transactionIndex    Int
+  gasPaid             String
+
+  trader              traders         @relation(fields: [traderId], references: [id])
+  transaction         transactions    @relation(fields: [txId], references: [id])
+}
+
+model tokens {
+  id            String    @id
+  name          String
+  symbol        String
+  decimals      Int
+  logoUrl       String?
+
+  prices        prices[]
+  tokensPool    tokensPools?
+}
+
+model pools {
+  id              String        @id
+  dexName         String
+  createdAtBlock  Int
+  updatedAtBlock  Int?
+  token0          String
+  token1          String
+  fee             Int?
+  tickSpacing     Int?
+  liquidity       BigInt?
+
+  tokensPools     tokensPools[]
+}
+
+model users {
+  id            String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  traderId      String?         @unique @db.Uuid
+  address       String          @unique
+  email         String?         @unique
+  telegramId    BigInt?         
+  data          Json            @default("{}")
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
+
+  trader        traders?        @relation(fields:[traderId], references: [id])  
+}
+
+model traders {
+  id                        String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  address                   String          @unique          
+  tpv                       String?
+  unrealizedPnl             BigInt?             
+  realizedPnl               BigInt?
+  shares                    String?
+  sharePrice                String?
+  realizedPnlPercentage     Int?
+  unrealizedPnlPercentage   Int?
+  wapBuy                    String?
+  wapSell                   String?
+  portfolio                 Json?
+  totalGas                  String?
+  createdAt                 DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime        @updatedAt @db.Timestamptz(6)         
+
+  transactions              transactions[]
+  operations                operations[]
+  user                      users?          
+}
+
+model prices {
+  id            String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tokenId       String
+  price         String
+  blockNumber   Int
+
+  token         tokens          @relation(fields:[tokenId], references: [id])
+}
+
+model tokensPools {
+  id                  String           @id
+  poolId              String
+  decimal0            Int
+  decimal1            Int
+  token0              String
+  token1              String
+
+  token               tokens           @relation(fields:[id], references: [id])
+  pool                pools            @relation(fields:[poolId], references: [id])
+}
