@@ -28,6 +28,7 @@ jobs:
         script: |
           cd reswaps-backend
           git pull origin main
+          pwd
           npm ci
           npm run build
           npm run prisma:generate
