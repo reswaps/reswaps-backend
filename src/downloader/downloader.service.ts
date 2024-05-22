@@ -10,7 +10,7 @@ import { ethers } from 'ethers-v6';
 import { CONFIG } from 'src/constants/config';
 import { DEX, NATIVE } from 'src/constants/names';
 import { PrismaService } from 'src/prisma/prisma.service';
-import erc20_abi from '../constants/abi/ERC20.json';
+import erc20_abi from '../constants/abi/erc20.json';
 import v2_pool from '../constants/abi/UNISWAP_V2/pool.json';
 import v3_pool from '../constants/abi/UNISWAP_V3/pool.json';
 
