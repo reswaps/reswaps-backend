@@ -28,5 +28,4 @@ jobs:
         script: |
           cd reswaps-backend
           git pull origin main
-          pwd
-          ls
+          pm2 list
