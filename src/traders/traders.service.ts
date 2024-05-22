@@ -400,6 +400,6 @@ export class TradersService {
   }
 
   async debug() {
-    return 'debug';
+    return 'debug 2';
   }
 }
