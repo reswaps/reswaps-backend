@@ -28,4 +28,10 @@ jobs:
         script: |
           cd reswaps-backend
           git pull origin main
-          pm2 list
+          export NVM_DIR=~/.nvm
+          source ~/.nvm/nvm.sh
+          npm ci
+          npm run build
+          npm run prisma:generate
+          npm run prisma:migrate
+          pm2 reload reswaps-backend
