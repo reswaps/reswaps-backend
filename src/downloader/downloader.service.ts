@@ -5,7 +5,7 @@ import {
 } from '@lib/common';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { type Prisma } from '@prisma/client';
+import { type Prisma } from '@reswaps/prisma';
 import { ethers } from 'ethers-v6';
 import { CONFIG } from 'src/constants/config';
 import { DEX, NATIVE } from 'src/constants/names';
@@ -46,8 +46,8 @@ export class DownloaderService {
     // }
     // await this.syncTokens();
     // await this.syncLiquidity(12);
-    //await this.syncBestTokensPools();
-    //await this.syncHistoricalPrices();
+    // await this.syncBestTokensPools();
+    // await this.syncHistoricalPrices();
   }
 
   async syncPools(dex: (typeof CONFIG.dexes)[number]) {

@@ -32,6 +32,4 @@ jobs:
           source ~/.nvm/nvm.sh
           npm ci
           npm run build
-          npm run prisma:generate
-          npm run prisma:migrate
           pm2 reload reswaps-backend
