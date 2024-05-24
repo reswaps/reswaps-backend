@@ -19,9 +19,9 @@ export const CONFIG = {
   batchCallLimit: 1000,
   multicallLimit: 1000,
   avgBlockTimeSeconds: 13.7,
-  priceTimeframeMinutes: 60,
-  priceHistoryLengthDays: 90,
+  priceTimeframeMinutes: 30,
   tokensPoolsLimit: 2300,
+  priceStartBlock: 18826369, // half year ago
   dexes: [
     {
       name: DEX.UNISWAP_V2,
@@ -45,11 +45,6 @@ export const CONFIG = {
       poolCreationEventName: 'PairCreated',
     },
   ],
-  getPriceStartBlocksAgo() {
-    return Math.ceil(
-      (this.priceHistoryLengthDays * 24 * 60 * 60) / this.avgBlockTimeSeconds,
-    );
-  },
   getPriceBlockStep() {
     return Math.ceil(
       (this.priceTimeframeMinutes * 60) / this.avgBlockTimeSeconds,

@@ -1,4 +1,4 @@
-import { getBlockIntervals, splitIntoChunks, splitObjectIntoChunks } from "@lib/common";
+import { findNextBlock, getBlockIntervals, splitIntoChunks, splitObjectIntoChunks } from "@lib/common";
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { type Prisma } from "@reswaps/prisma";
@@ -230,11 +230,11 @@ export class DownloaderService {
           decimal0: number;
           decimal1: number;
           price: string;
-          blockNumber: number;
+          lastPriceBlockNumber: number;
           createdAtBlock: number;
           dexName: string;
         }[]
-      >`SELECT tp.*,recent_price.price,recent_price."blockNumber", pools."createdAtBlock", pools."dexName" from "tokensPools" tp JOIN pools ON pools.id = tp."poolId" 
+      >`SELECT tp.*,recent_price.price,recent_price."blockNumber" as "lastPriceBlockNumber", pools."createdAtBlock", pools."dexName" from "tokensPools" tp JOIN pools ON pools.id = tp."poolId" 
       LEFT JOIN (SELECT DISTINCT ON ("tokenId")
       "tokenId",
       price,
@@ -262,13 +262,18 @@ export class DownloaderService {
       return wethUsdPool.poolId !== tp.poolId;
     });
 
-    const earliestBlock = latestBlock - CONFIG.getPriceStartBlocksAgo();
+    const earliestBlock = CONFIG.priceStartBlock;
     const blockStep = CONFIG.getPriceBlockStep();
+    const blocks = [];
+    for (let i = earliestBlock; i < latestBlock; i += blockStep) {
+      blocks.push(i);
+    }
+    blocks.push(latestBlock);
 
     const requests: HistoricalPriceRequests = {};
     const wethUsdRequests: HistoricalPriceRequests = {};
 
-    const wethFromBlock = wethUsdPool.blockNumber ? wethUsdPool.blockNumber + blockStep : Math.max(earliestBlock, wethUsdPool.createdAtBlock);
+    const wethFromBlock = findNextBlock(wethUsdPool.lastPriceBlockNumber || Math.max(earliestBlock, wethUsdPool.createdAtBlock), blocks);
 
     for (let i = wethFromBlock; i < latestBlock; i += blockStep) {
       if (!wethUsdRequests[i]) {
@@ -287,7 +292,7 @@ export class DownloaderService {
     }
 
     for (const tp of poolsWithoutWethUsd) {
-      const fromBlock = tp.blockNumber ? tp.blockNumber + blockStep : Math.max(earliestBlock, tp.createdAtBlock);
+      const fromBlock = findNextBlock(tp.lastPriceBlockNumber || Math.max(earliestBlock, tp.createdAtBlock), blocks);
 
       for (let i = fromBlock; i < latestBlock; i += blockStep) {
         if (!requests[i]) {

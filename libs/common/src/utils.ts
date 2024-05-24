@@ -51,3 +51,8 @@ export const getAverage = (nums: number[]) => {
   const filtered = nums.filter((num) => num !== 0);
   return filtered.reduce((a, b) => a + b, 0) / filtered.length;
 };
+
+export const findNextBlock = (block: number, orderedBlocks: number[]) => {
+  const index = orderedBlocks.findIndex((b) => b >= block);
+  return orderedBlocks[index];
+}
