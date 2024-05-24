@@ -15,6 +15,7 @@ import { HistoricalPrice, HistoricalPriceRequests, Portfolio, PriceAndBlock, Pri
 import { Web3rpcService } from "src/web3rpc/web3rpc.service";
 import axios from "axios";
 import { ConfigService } from "@nestjs/config";
+import { NEGATIVE_BALANCE_DURING_PARSING } from "src/constants/errors";
 
 @Injectable()
 export class DownloaderService {
@@ -785,10 +786,27 @@ export class DownloaderService {
     this.logger.warn(`Deleted ${pools.length} pools with failed tokens`);
   }
 
-  async syncTrader(trader: { id: string; address: string }) {
+  async syncTrader(trader: { id: string; address: string }, retryCount = 0) {
     this.logger.debug(`Loading trader ${trader.address}`);
     await this.syncTransactions(trader.id, trader.address);
-    await this.syncOperations(trader.id, trader.address);
+    try {
+      await this.syncOperations(trader.id, trader.address);
+    } catch (e: any) {
+      if (e?.message === NEGATIVE_BALANCE_DURING_PARSING && retryCount < 3) {
+        this.logger.error(`Failed to sync operations for ${trader.address}. ${NEGATIVE_BALANCE_DURING_PARSING}`);
+        retryCount++;
+        this.logger.log(`Deleting all transactions for ${trader.address} and retrying ${retryCount} more times`);
+        await this.prisma.transactions.deleteMany({
+          where: {
+            traderId: trader.id,
+          },
+        });
+        await this.syncTrader(trader, retryCount);
+      } else {
+        throw e;
+      }
+    }
+
     return await this.getCurrentTpv(trader.id);
   }
 

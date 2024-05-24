@@ -13,6 +13,7 @@ import {
   Transfer,
 } from 'src/downloader/types';
 import { CONFIG } from 'src/constants/config';
+import { NEGATIVE_BALANCE_DURING_PARSING } from 'src/constants/errors';
 
 @Injectable()
 export class ParserService {
@@ -202,10 +203,7 @@ export class ParserService {
 
     for (const token in portfolio) {
       if (parseFloat(portfolio[token].amount) < 0) {
-        console.log(portfolio, 'portfolio');
-        console.log(prevPortfolio, 'prevPortfolio');
-        console.log(transfers, 'transfers');
-        throw Error('Negative balance');
+        throw Error(NEGATIVE_BALANCE_DURING_PARSING);
       } else if (portfolio[token].amount === '0') {
         delete portfolio[token];
       }

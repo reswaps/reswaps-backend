@@ -19,8 +19,8 @@ export const CONFIG = {
   batchCallLimit: 1000,
   multicallLimit: 1000,
   avgBlockTimeSeconds: 13.7,
-  priceTimeframeMinutes: 30,
-  tokensPoolsLimit: 2300,
+  priceTimeframeMinutes: 60,
+  tokensPoolsLimit: 10000,
   priceStartBlock: 18826369, // half year ago
   dexes: [
     {

@@ -1,0 +1,1 @@
+export const NEGATIVE_BALANCE_DURING_PARSING = 'Negative balance during parsing';
