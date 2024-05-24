@@ -5,7 +5,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { DownloaderModule } from './downloader/downloader.module';
-import { TradersModule } from './traders/traders.module';
+import { ApiModule } from './api/api.module';
 import { ParserModule } from './parser/parser.module';
 import { Web3rpcModule } from './web3rpc/web3rpc.module';
 
@@ -15,7 +15,7 @@ import { Web3rpcModule } from './web3rpc/web3rpc.module';
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     DownloaderModule,
-    TradersModule,
+    ApiModule,
     ParserModule,
     Web3rpcModule,
   ],

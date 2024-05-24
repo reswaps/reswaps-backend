@@ -1,33 +1,20 @@
-import {
-  getBlockIntervals,
-  splitIntoChunks,
-  splitObjectIntoChunks,
-} from '@lib/common';
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { type Prisma } from '@reswaps/prisma';
-import { ethers } from 'ethers-v6';
-import { CONFIG } from 'src/constants/config';
-import { DEX, NATIVE } from 'src/constants/names';
-import { PrismaService } from 'src/prisma/prisma.service';
-import erc20_abi from '../constants/abi/erc20.json';
-import v2_pool from '../constants/abi/UNISWAP_V2/pool.json';
-import v3_pool from '../constants/abi/UNISWAP_V3/pool.json';
+import { getBlockIntervals, splitIntoChunks, splitObjectIntoChunks } from "@lib/common";
+import { Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { type Prisma } from "@reswaps/prisma";
+import { ethers } from "ethers-v6";
+import { CONFIG } from "src/constants/config";
+import { DEX, NATIVE } from "src/constants/names";
+import { PrismaService } from "src/prisma/prisma.service";
+import erc20_abi from "../constants/abi/erc20.json";
+import v2_pool from "../constants/abi/UNISWAP_V2/pool.json";
+import v3_pool from "../constants/abi/UNISWAP_V3/pool.json";
 
-import { ParserService } from 'src/parser/parser.service';
-import {
-  HistoricalPrice,
-  HistoricalPriceRequests,
-  Portfolio,
-  PriceAndBlock,
-  PriceMap,
-  PricedPortfolio,
-  TokensMap,
-  TokensPool,
-} from './types';
-import { Web3rpcService } from 'src/web3rpc/web3rpc.service';
-import axios from 'axios';
-import { ConfigService } from '@nestjs/config';
+import { ParserService } from "src/parser/parser.service";
+import { HistoricalPrice, HistoricalPriceRequests, Portfolio, PriceAndBlock, PriceMap, PricedPortfolio, TokensMap, TokensPool } from "./types";
+import { Web3rpcService } from "src/web3rpc/web3rpc.service";
+import axios from "axios";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class DownloaderService {
@@ -36,7 +23,7 @@ export class DownloaderService {
     private prisma: PrismaService,
     private parser: ParserService,
     private web3rpc: Web3rpcService,
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigService
   ) {}
 
   @Cron(CronExpression.EVERY_12_HOURS)
@@ -51,42 +38,37 @@ export class DownloaderService {
   }
 
   async syncPools(dex: (typeof CONFIG.dexes)[number]) {
-    const [lastPool, pools] = await Promise.all([
+    const [lastPool, pools, toBlock, scamTokens] = await Promise.all([
       this.prisma.pools.findFirst({
         where: {
           dexName: dex.name,
         },
         orderBy: {
-          createdAtBlock: 'desc',
+          createdAtBlock: "desc",
         },
       }),
       this.prisma.pools.findMany(),
+      this.web3rpc.provider.getBlockNumber(),
+      this.prisma.scamTokens.findMany(),
     ]);
 
-    const fromBlock = lastPool
-      ? lastPool.createdAtBlock
-      : dex.factoryStartBlock;
+    const fromBlock = lastPool ? lastPool.createdAtBlock : dex.factoryStartBlock;
 
     this.logger.log(`Loading pools for ${dex.name} from block ${fromBlock}`);
 
-    const toBlock = await this.web3rpc.provider.getBlockNumber();
-
-    const Factory = new ethers.Contract(
-      dex.factoryAddress,
-      dex.abi,
-      this.web3rpc.provider,
-    );
+    const Factory = new ethers.Contract(dex.factoryAddress, dex.abi, this.web3rpc.provider);
 
     const intervals = getBlockIntervals(fromBlock, toBlock, 20000);
     const filter = Factory.filters[dex.poolCreationEventName](null);
     const batchSize = 5;
     const processedPoolIds = new Set(pools.map((pool) => pool.id));
+    const scamTokensIds = new Set(scamTokens.map((token) => token.id));
     for (let i = 0; i < intervals.length; i += batchSize) {
       const intervalBatch = intervals.slice(i, i + batchSize);
       const resultBatch = await Promise.all(
         intervalBatch.map((interval) => {
           return Factory.queryFilter(filter, interval[0], interval[1]);
-        }),
+        })
       );
       const data = [];
 
@@ -94,7 +76,7 @@ export class DownloaderService {
         const parsedEvent = this.parser.parsePoolCreationEvent(event, dex.name);
         if (parsedEvent) {
           const { id, token0, token1, fee, tickSpacing } = parsedEvent;
-          if (!processedPoolIds.has(id) && event.removed === false) {
+          if (!processedPoolIds.has(id) && event.removed === false && scamTokensIds.has(token0) === false && scamTokensIds.has(token1) === false) {
             data.push({
               id,
               dexName: dex.name,
@@ -126,7 +108,7 @@ export class DownloaderService {
           },
         },
         orderBy: {
-          liquidity: 'desc',
+          liquidity: "desc",
         },
         take: CONFIG.tokensPoolsLimit,
       }),
@@ -156,25 +138,14 @@ export class DownloaderService {
       const alreadyAdded = tokensPools.find((tp) => tp.id === targetToken);
 
       if (alreadyAdded) {
-        const isAlreadyInReplace = tokensPoolsReplace.find(
-          (tp) => tp.id === targetToken,
-        );
+        const isAlreadyInReplace = tokensPoolsReplace.find((tp) => tp.id === targetToken);
 
         const isPoolsEqual = alreadyAdded.poolId === pool.id;
         const isUsdPoolFound = this.parser.isUsdPool(alreadyAdded);
-        const newPoolBetterThanOld =
-          pool.liquidity > alreadyAdded.pool.liquidity;
-        const isOldPoolV3ButNewV2 =
-          !this.parser.isV2(alreadyAdded.pool.dexName as DEX) &&
-          this.parser.isV2(pool.dexName as DEX);
+        const newPoolBetterThanOld = pool.liquidity > alreadyAdded.pool.liquidity;
+        const isOldPoolV3ButNewV2 = !this.parser.isV2(alreadyAdded.pool.dexName as DEX) && this.parser.isV2(pool.dexName as DEX);
 
-        if (
-          !isAlreadyInReplace &&
-          !isPoolsEqual &&
-          newPoolBetterThanOld &&
-          !isOldPoolV3ButNewV2 &&
-          isUsdPoolFound === isUsdPool
-        ) {
+        if (!isAlreadyInReplace && !isPoolsEqual && newPoolBetterThanOld && !isOldPoolV3ButNewV2 && isUsdPoolFound === isUsdPool) {
           tokensPoolsReplace.push({
             id: targetToken,
             poolId: pool.id,
@@ -215,9 +186,7 @@ export class DownloaderService {
       const decimal0 = tokens[pool.token0].decimals;
       const decimal1 = tokens[pool.token1].decimals;
       const alreadyAdded = tokensPools2.find((tp) => tp.id === targetToken);
-      const alreadyInNewPools = newTokensPools.find(
-        (tp) => tp.id === targetToken,
-      );
+      const alreadyInNewPools = newTokensPools.find((tp) => tp.id === targetToken);
 
       if (!alreadyAdded && !alreadyInNewPools) {
         newTokensPools.push({
@@ -286,7 +255,7 @@ export class DownloaderService {
     });
 
     if (!wethUsdPool) {
-      throw Error('WETH/USD pool not found');
+      throw Error("WETH/USD pool not found");
     }
 
     const poolsWithoutWethUsd = tokensPools.filter((tp) => {
@@ -299,9 +268,7 @@ export class DownloaderService {
     const requests: HistoricalPriceRequests = {};
     const wethUsdRequests: HistoricalPriceRequests = {};
 
-    const wethFromBlock = wethUsdPool.blockNumber
-      ? wethUsdPool.blockNumber + blockStep
-      : Math.max(earliestBlock, wethUsdPool.createdAtBlock);
+    const wethFromBlock = wethUsdPool.blockNumber ? wethUsdPool.blockNumber + blockStep : Math.max(earliestBlock, wethUsdPool.createdAtBlock);
 
     for (let i = wethFromBlock; i < latestBlock; i += blockStep) {
       if (!wethUsdRequests[i]) {
@@ -320,9 +287,7 @@ export class DownloaderService {
     }
 
     for (const tp of poolsWithoutWethUsd) {
-      const fromBlock = tp.blockNumber
-        ? tp.blockNumber + blockStep
-        : Math.max(earliestBlock, tp.createdAtBlock);
+      const fromBlock = tp.blockNumber ? tp.blockNumber + blockStep : Math.max(earliestBlock, tp.createdAtBlock);
 
       for (let i = fromBlock; i < latestBlock; i += blockStep) {
         if (!requests[i]) {
@@ -343,49 +308,29 @@ export class DownloaderService {
 
     const promiseAllSize = 20;
 
-    const wethBatches = splitObjectIntoChunks(
-      wethUsdRequests,
-      Math.ceil(Object.keys(wethUsdRequests).length / promiseAllSize),
-    );
+    const wethBatches = splitObjectIntoChunks(wethUsdRequests, Math.ceil(Object.keys(wethUsdRequests).length / promiseAllSize));
 
-    this.logger.log(
-      `Start loading historical prices for WETH/USD for ${wethBatches.length} batches`,
-    );
+    this.logger.log(`Start loading historical prices for WETH/USD for ${wethBatches.length} batches`);
     for (let i = 0; i < wethBatches.length; i += promiseAllSize) {
       const batch = wethBatches.slice(i, i + promiseAllSize);
       await Promise.all(batch.map((b) => this.saveHistoricalPrices(b)));
     }
-    this.logger.log('WETH/USD done');
+    this.logger.log("WETH/USD done");
 
     const wethUsdPrices = await this.getPriceMap([wethUsdPool.id]);
 
-    const allBatches = splitObjectIntoChunks(
-      requests,
-      Math.ceil(Object.keys(requests).length / promiseAllSize),
-    );
+    const allBatches = splitObjectIntoChunks(requests, Math.ceil(Object.keys(requests).length / promiseAllSize));
 
-    this.logger.log(
-      `Start loading historical price for rest tokens for ${allBatches.length} batches`,
-    );
+    this.logger.log(`Start loading historical price for rest tokens for ${allBatches.length} batches`);
     for (let i = 0; i < allBatches.length; i += promiseAllSize) {
       const batch = allBatches.slice(i, i + promiseAllSize);
-      await Promise.all(
-        batch.map((b) =>
-          this.saveHistoricalPrices(b, wethUsdPrices[wethUsdPool.id]),
-        ),
-      );
+      await Promise.all(batch.map((b) => this.saveHistoricalPrices(b, wethUsdPrices[wethUsdPool.id])));
     }
-    this.logger.log('Prices synced');
+    this.logger.log("Prices synced");
   }
 
-  async saveHistoricalPrices(
-    requests: HistoricalPriceRequests,
-    wethUsdPrices?: PriceAndBlock[],
-    size = CONFIG.multicallLimit,
-  ) {
-    this.logger.log(
-      `Start loading historical prices with ${Object.keys(requests).length} blocks`,
-    );
+  async saveHistoricalPrices(requests: HistoricalPriceRequests, wethUsdPrices?: PriceAndBlock[], size = CONFIG.multicallLimit) {
+    this.logger.log(`Start loading historical prices with ${Object.keys(requests).length} blocks`);
 
     const fails: HistoricalPriceRequests = {};
 
@@ -409,9 +354,7 @@ export class DownloaderService {
 
     if (Object.keys(fails).length > 0) {
       const newSize = Math.ceil(size / 2);
-      this.logger.error(
-        `Failed to load prices for ${Object.keys(fails).length} blocks. Retrying with size ${newSize}`,
-      );
+      this.logger.error(`Failed to load prices for ${Object.keys(fails).length} blocks. Retrying with size ${newSize}`);
       await this.saveHistoricalPrices(fails, wethUsdPrices, newSize);
     }
   }
@@ -425,7 +368,7 @@ export class DownloaderService {
         },
       },
       orderBy: {
-        blockNumber: 'asc',
+        blockNumber: "asc",
       },
     });
 
@@ -442,20 +385,11 @@ export class DownloaderService {
     return priceMap;
   }
 
-  async saveHistoricalPriceForChunk(
-    chunk: TokensPool[],
-    blockNumber: number,
-    wethUsdPrices?: PriceAndBlock[],
-  ) {
-    const v2requests = chunk.filter((req) =>
-      this.parser.isV2(req.dexName as DEX),
-    );
-    const v3requests = chunk.filter(
-      (req) => !this.parser.isV2(req.dexName as DEX),
-    );
+  async saveHistoricalPriceForChunk(chunk: TokensPool[], blockNumber: number, wethUsdPrices?: PriceAndBlock[]) {
+    const v2requests = chunk.filter((req) => this.parser.isV2(req.dexName as DEX));
+    const v3requests = chunk.filter((req) => !this.parser.isV2(req.dexName as DEX));
 
-    const wethPrice =
-      wethUsdPrices && this.parser.getNearestPrice(wethUsdPrices, blockNumber);
+    const wethPrice = wethUsdPrices && this.parser.getNearestPrice(wethUsdPrices, blockNumber);
 
     if (wethUsdPrices && !wethPrice) {
       throw Error(`WETH/USD price not found for blockNumber: ${blockNumber}`);
@@ -465,18 +399,18 @@ export class DownloaderService {
       this.web3rpc.historicalMultiCall(
         v2requests.map((req) => req.poolId),
         v2_pool,
-        'getReserves',
+        "getReserves",
         [],
         false,
-        blockNumber,
+        blockNumber
       ),
       this.web3rpc.historicalMultiCall(
         v3requests.map((req) => req.poolId),
         v3_pool,
-        'slot0',
+        "slot0",
         [],
         false,
-        blockNumber,
+        blockNumber
       ),
     ]);
 
@@ -541,9 +475,7 @@ export class DownloaderService {
       data: tokenPrices,
     });
 
-    this.logger.log(
-      `Saved ${tokenPrices.length} prices for block ${blockNumber}`,
-    );
+    this.logger.log(`Saved ${tokenPrices.length} prices for block ${blockNumber}`);
   }
 
   async syncLiquidity(hours: number) {
@@ -551,16 +483,9 @@ export class DownloaderService {
     const [pools, usdTokens] = await Promise.all([
       this.prisma.pools.findMany({
         where: {
-          OR: [
-            { token0: { in: CONFIG.usdTokens } },
-            { token1: { in: CONFIG.usdTokens } },
-            { token0: CONFIG.weth },
-            { token1: CONFIG.weth },
-          ],
+          OR: [{ token0: { in: CONFIG.usdTokens } }, { token1: { in: CONFIG.usdTokens } }, { token0: CONFIG.weth }, { token1: CONFIG.weth }],
           updatedAtBlock: {
-            lte:
-              blockNumber -
-              Math.ceil((hours * 60 * 60) / CONFIG.avgBlockTimeSeconds),
+            lte: blockNumber - Math.ceil((hours * 60 * 60) / CONFIG.avgBlockTimeSeconds),
           },
         },
       }),
@@ -576,56 +501,30 @@ export class DownloaderService {
 
     const usdTokensMap = this.parser.getTokensMap(usdTokens);
 
-    const v2pools = pools.filter((pool) =>
-      this.parser.isV2(pool.dexName as DEX),
-    );
+    const v2pools = pools.filter((pool) => this.parser.isV2(pool.dexName as DEX));
 
-    const v3pools = pools.filter(
-      (pool) => !this.parser.isV2(pool.dexName as DEX),
-    );
+    const v3pools = pools.filter((pool) => !this.parser.isV2(pool.dexName as DEX));
 
-    const { data } = await axios.get(
-      this.configService.get('COINAPI_URL') +
-        `/v1/exchangerate/${CONFIG.coinapiSymbol}/USD/`,
-      { headers: { 'X-CoinAPI-Key': this.configService.get('COINAPI_KEY') } },
-    );
+    const { data } = await axios.get(this.configService.get("COINAPI_URL") + `/v1/exchangerate/${CONFIG.coinapiSymbol}/USD/`, {
+      headers: { "X-CoinAPI-Key": this.configService.get("COINAPI_KEY") },
+    });
 
     const wethPrice = parseFloat(data.rate.toFixed(0));
     const v2chunks = splitIntoChunks(v2pools, Math.ceil(v2pools.length / 7));
     const v3chunks = splitIntoChunks(v3pools, Math.ceil(v3pools.length / 7));
 
-    await Promise.all(
-      v2chunks.map((chunk) =>
-        this.loadV2Liquidity(chunk, usdTokensMap, wethPrice, blockNumber),
-      ),
-    );
+    await Promise.all(v2chunks.map((chunk) => this.loadV2Liquidity(chunk, usdTokensMap, wethPrice, blockNumber)));
 
-    await Promise.all(
-      v3chunks.map((chunk) =>
-        this.loadV3Liquidity(chunk, usdTokensMap, wethPrice, blockNumber),
-      ),
-    );
+    await Promise.all(v3chunks.map((chunk) => this.loadV3Liquidity(chunk, usdTokensMap, wethPrice, blockNumber)));
   }
 
-  async loadV2Liquidity(
-    pools: Prisma.poolsGetPayload<any>[],
-    decimalsMap: any,
-    wethPrice: number,
-    blockNumber: number,
-    size = 1000,
-  ) {
+  async loadV2Liquidity(pools: Prisma.poolsGetPayload<any>[], decimalsMap: any, wethPrice: number, blockNumber: number, size = 1000) {
     for (let i = 0; i < pools.length; i += size) {
       const poolData: Prisma.poolsCreateManyInput[] = [];
       const batch = pools.slice(i, i + size);
       const poolAddresses = batch.map((pool) => pool.id);
 
-      const results = await this.web3rpc.multiCallWithRetry(
-        poolAddresses,
-        v2_pool,
-        'getReserves',
-        [],
-        false,
-      );
+      const results = await this.web3rpc.multiCallWithRetry(poolAddresses, v2_pool, "getReserves", [], false);
 
       for (let j = 0; j < batch.length; j++) {
         const pool = batch[j];
@@ -640,29 +539,15 @@ export class DownloaderService {
 
           if (isUsdPool) {
             if (CONFIG.usdTokens.includes(token0)) {
-              liquidity = Math.ceil(
-                this.parser.parseLiquidity(
-                  reserve0,
-                  decimalsMap[token0].decimals,
-                ),
-              );
+              liquidity = Math.ceil(this.parser.parseLiquidity(reserve0, decimalsMap[token0].decimals));
             } else {
-              liquidity = Math.ceil(
-                this.parser.parseLiquidity(
-                  reserve1,
-                  decimalsMap[token1].decimals,
-                ),
-              );
+              liquidity = Math.ceil(this.parser.parseLiquidity(reserve1, decimalsMap[token1].decimals));
             }
           } else {
             if (token0 === CONFIG.weth) {
-              liquidity = Math.ceil(
-                this.parser.parseLiquidity(reserve0, 18) * wethPrice,
-              );
+              liquidity = Math.ceil(this.parser.parseLiquidity(reserve0, 18) * wethPrice);
             } else {
-              liquidity = Math.ceil(
-                this.parser.parseLiquidity(reserve1, 18) * wethPrice,
-              );
+              liquidity = Math.ceil(this.parser.parseLiquidity(reserve1, 18) * wethPrice);
             }
           }
 
@@ -682,9 +567,7 @@ export class DownloaderService {
 
       await this.savePoolsWithUpdatedLiquidity(poolData);
 
-      this.logger.log(
-        `Loaded liquidity ${i + poolData.length} / ${pools.length} v2 pools`,
-      );
+      this.logger.log(`Loaded liquidity ${i + poolData.length} / ${pools.length} v2 pools`);
     }
   }
 
@@ -723,10 +606,10 @@ export class DownloaderService {
 
   async loadV3Liquidity(
     pools: Prisma.poolsGetPayload<any>[],
-    decimalsMap: { [token: string]: Omit<Prisma.tokensGetPayload<any>, 'id'> },
+    decimalsMap: { [token: string]: Omit<Prisma.tokensGetPayload<any>, "id"> },
     wethPrice: number,
     blockNumber: number,
-    size = 1000,
+    size = 1000
   ) {
     const fails = [];
     for (let i = 0; i < pools.length; i += size) {
@@ -737,20 +620,8 @@ export class DownloaderService {
       const poolAddresses = batch.map((pool) => pool.id);
       try {
         const [token0reserves, token1reserves] = await Promise.all([
-          this.web3rpc.multicall(
-            token0s,
-            erc20_abi,
-            'balanceOf',
-            poolAddresses,
-            true,
-          ),
-          this.web3rpc.multicall(
-            token1s,
-            erc20_abi,
-            'balanceOf',
-            poolAddresses,
-            true,
-          ),
+          this.web3rpc.multicall(token0s, erc20_abi, "balanceOf", poolAddresses, true),
+          this.web3rpc.multicall(token1s, erc20_abi, "balanceOf", poolAddresses, true),
         ]);
 
         for (let j = 0; j < batch.length; j++) {
@@ -767,29 +638,15 @@ export class DownloaderService {
 
             if (isUsdPool) {
               if (CONFIG.usdTokens.includes(token0)) {
-                liquidity = Math.ceil(
-                  this.parser.parseLiquidity(
-                    reserve0,
-                    decimalsMap[token0].decimals,
-                  ),
-                );
+                liquidity = Math.ceil(this.parser.parseLiquidity(reserve0, decimalsMap[token0].decimals));
               } else {
-                liquidity = Math.ceil(
-                  this.parser.parseLiquidity(
-                    reserve1,
-                    decimalsMap[token1].decimals,
-                  ),
-                );
+                liquidity = Math.ceil(this.parser.parseLiquidity(reserve1, decimalsMap[token1].decimals));
               }
             } else {
               if (token0 === CONFIG.weth) {
-                liquidity = Math.ceil(
-                  this.parser.parseLiquidity(reserve0, 18) * wethPrice,
-                );
+                liquidity = Math.ceil(this.parser.parseLiquidity(reserve0, 18) * wethPrice);
               } else {
-                liquidity = Math.ceil(
-                  this.parser.parseLiquidity(reserve1, 18) * wethPrice,
-                );
+                liquidity = Math.ceil(this.parser.parseLiquidity(reserve1, 18) * wethPrice);
               }
             }
 
@@ -809,9 +666,7 @@ export class DownloaderService {
 
         await this.savePoolsWithUpdatedLiquidity(poolData);
 
-        this.logger.log(
-          `Loaded liquidity ${i + poolData.length} / ${pools.length} v3 pools`,
-        );
+        this.logger.log(`Loaded liquidity ${i + poolData.length} / ${pools.length} v3 pools`);
       } catch (e) {
         if (size === 1) {
           this.logger.error(`Failed to load pool ${batch[0].id}`);
@@ -862,16 +717,16 @@ export class DownloaderService {
 
       try {
         const [decimalsBatch, namesBatch, symbolsBatch] = await Promise.all([
-          this.web3rpc.multicall(batch, erc20_abi, 'decimals', [], false),
-          this.web3rpc.multicall(batch, erc20_abi, 'name', [], false),
-          this.web3rpc.multicall(batch, erc20_abi, 'symbol', [], false),
+          this.web3rpc.multicall(batch, erc20_abi, "decimals", [], false),
+          this.web3rpc.multicall(batch, erc20_abi, "name", [], false),
+          this.web3rpc.multicall(batch, erc20_abi, "symbol", [], false),
         ]);
 
         const tokenData = batch.map((addr, index) => ({
           id: addr,
           decimals: Number(decimalsBatch[index]),
-          name: namesBatch[index][0] || '',
-          symbol: symbolsBatch[index][0] || '',
+          name: namesBatch[index][0] || "",
+          symbol: symbolsBatch[index][0] || "",
         }));
 
         await this.prisma.tokens.createMany({
@@ -910,10 +765,7 @@ export class DownloaderService {
   async deletePoolsWithFailedTokens(failedTokens: string[]) {
     const pools = await this.prisma.pools.findMany({
       where: {
-        OR: [
-          { token0: { in: failedTokens } },
-          { token1: { in: failedTokens } },
-        ],
+        OR: [{ token0: { in: failedTokens } }, { token1: { in: failedTokens } }],
       },
     });
 
@@ -940,7 +792,7 @@ export class DownloaderService {
       where: {
         traderId,
       },
-      orderBy: [{ blockNumber: 'desc' }, { transactionIndex: 'desc' }],
+      orderBy: [{ blockNumber: "desc" }, { transactionIndex: "desc" }],
     });
 
     const lastPortfolio = lastOperation?.portfolio as Portfolio;
@@ -950,7 +802,7 @@ export class DownloaderService {
       include: {
         prices: {
           orderBy: {
-            blockNumber: 'desc',
+            blockNumber: "desc",
           },
           take: 1,
         },
@@ -971,9 +823,7 @@ export class DownloaderService {
       const { amount, decimals } = lastPortfolio[token];
       const tokenData = tokensWithPrices.find((t) => t.id === tokenId);
       if (tokenData) {
-        const price = CONFIG.usdTokens.includes(tokenId)
-          ? 1
-          : parseFloat(tokenData.prices[0]?.price) || 0;
+        const price = CONFIG.usdTokens.includes(tokenId) ? 1 : parseFloat(tokenData.prices[0]?.price) || 0;
         const amountNumber = Number(ethers.formatUnits(amount, decimals));
         const value = price * amountNumber;
         tpv += value;
@@ -999,29 +849,26 @@ export class DownloaderService {
       },
       orderBy: [
         {
-          blockNumber: 'desc',
+          blockNumber: "desc",
         },
         {
-          transactionIndex: 'desc',
+          transactionIndex: "desc",
         },
       ],
     });
 
     const fromBlock = lastTransaction?.lastUpdatedBlock
-      ? '0x' + lastTransaction?.lastUpdatedBlock?.toString(16)
+      ? "0x" + lastTransaction?.lastUpdatedBlock?.toString(16)
       : lastTransaction?.blockNumber
-        ? '0x' + lastTransaction?.blockNumber.toString(16)
-        : '0x0';
+        ? "0x" + lastTransaction?.blockNumber.toString(16)
+        : "0x0";
 
     const uniqueTxs = [];
     const minimizeTx = (tx: any) => {
       return {
         hash: tx.hash,
         blockNumber: parseInt(tx.blockNum, 16),
-        value:
-          tx.category !== 'erc20'
-            ? ethers.parseEther(tx.value.toFixed(18)).toString()
-            : '0',
+        value: tx.category !== "erc20" ? ethers.parseEther(tx.value.toFixed(18)).toString() : "0",
         date: tx.metadata.blockTimestamp,
         from: tx.from.toLowerCase(),
         to: tx.to.toLowerCase(),
@@ -1030,9 +877,9 @@ export class DownloaderService {
     };
 
     const [external, internal, erc20] = await Promise.all([
-      this.getAssetTransfers(address, fromBlock, ['external']),
-      this.getAssetTransfers(address, fromBlock, ['internal']),
-      this.getAssetTransfers(address, fromBlock, ['erc20']),
+      this.getAssetTransfers(address, fromBlock, ["external"]),
+      this.getAssetTransfers(address, fromBlock, ["internal"]),
+      this.getAssetTransfers(address, fromBlock, ["erc20"]),
     ]);
 
     for (const tx of external.concat(erc20)) {
@@ -1046,9 +893,7 @@ export class DownloaderService {
 
     for (const tx of internal) {
       if (tx.hash !== lastTransaction?.hash) {
-        const existingTxIndex = uniqueTxs.findIndex(
-          (utx) => utx.hash === tx.hash,
-        );
+        const existingTxIndex = uniqueTxs.findIndex((utx) => utx.hash === tx.hash);
 
         if (existingTxIndex < 0) {
           uniqueTxs.push(minimizeTx(tx));
@@ -1076,8 +921,8 @@ export class DownloaderService {
             const finalTxs: Prisma.transactionsCreateManyInput[] = [];
             const batch = chunk.slice(i, i + batchSize);
             const receipts = await this.web3rpc.batchCall(
-              'eth_getTransactionReceipt',
-              batch.map((tx) => [tx.hash]),
+              "eth_getTransactionReceipt",
+              batch.map((tx) => [tx.hash])
             );
 
             for (let j = 0; j < batch.length; j++) {
@@ -1090,13 +935,8 @@ export class DownloaderService {
                 transactionIndex: parseInt(receipt.transactionIndex, 16),
                 traderId,
                 logs: receipt.logs,
-                gasUsed: isFakeERC20
-                  ? '0'
-                  : (
-                      ethers.getBigInt(receipt.gasUsed) *
-                      ethers.getBigInt(receipt.effectiveGasPrice)
-                    ).toString(),
-                isFailed: receipt.status === '0x0',
+                gasUsed: isFakeERC20 ? "0" : (ethers.getBigInt(receipt.gasUsed) * ethers.getBigInt(receipt.effectiveGasPrice)).toString(),
+                isFailed: receipt.status === "0x0",
               });
             }
 
@@ -1109,37 +949,28 @@ export class DownloaderService {
 
             this.logger.debug(`Synced ${synced} / ${uniqueTxs.length} txs`);
           }
-        }),
+        })
       );
     } catch (e) {
-      this.logger.error('Error syncing transactions', e);
+      this.logger.error("Error syncing transactions", e);
     }
   }
 
-  async syncOperations(
-    traderId: string,
-    traderAddress: string,
-  ): Promise<number> {
-    this.logger.debug('Start syncing operations');
+  async syncOperations(traderId: string, traderAddress: string): Promise<number> {
+    this.logger.debug("Start syncing operations");
 
-    const operations = await this.getOperationsFromTransactions(
-      traderId,
-      traderAddress,
-    );
+    const operations = await this.getOperationsFromTransactions(traderId, traderAddress);
 
-    this.logger.debug('Operations loaded');
+    this.logger.debug("Operations loaded");
     if (operations.length > 0) {
-      const operationsChunks = splitIntoChunks(
-        operations,
-        Math.ceil(operations.length / 10),
-      );
+      const operationsChunks = splitIntoChunks(operations, Math.ceil(operations.length / 10));
 
       await Promise.all(
         operationsChunks.map((chunk) => {
           return this.prisma.operations.createMany({
             data: chunk,
           });
-        }),
+        })
       );
       this.logger.debug(`Synced ${operations.length} operations`);
     }
@@ -1147,17 +978,14 @@ export class DownloaderService {
     return operations[0]?.blockNumber;
   }
 
-  async getOperationsFromTransactions(
-    traderId: string,
-    traderAddress: string,
-  ): Promise<Prisma.operationsCreateManyInput[]> {
+  async getOperationsFromTransactions(traderId: string, traderAddress: string): Promise<Prisma.operationsCreateManyInput[]> {
     const [transactions, tokensPools] = await Promise.all([
       this.prisma.transactions.findMany({
         where: {
           traderId,
           operation: null,
         },
-        orderBy: [{ blockNumber: 'asc' }, { transactionIndex: 'asc' }],
+        orderBy: [{ blockNumber: "asc" }, { transactionIndex: "asc" }],
       }),
       this.prisma.tokensPools.findMany({
         select: {
@@ -1188,27 +1016,19 @@ export class DownloaderService {
       },
       orderBy: [
         {
-          blockNumber: 'desc',
+          blockNumber: "desc",
         },
-        { transactionIndex: 'desc' },
+        { transactionIndex: "desc" },
       ],
     });
 
-    let prevPortfolio: Portfolio =
-      (prevOperation?.portfolio as Portfolio) || {};
+    let prevPortfolio: Portfolio = (prevOperation?.portfolio as Portfolio) || {};
 
     const operations: Prisma.operationsCreateManyInput[] = [];
 
     for (const tx of transactions) {
-      const transfers = this.parser.parseTransactionToTransfers(
-        tx,
-        traderAddress,
-        tokens,
-      );
-      const portfolio = this.parser.parseTransfersToPortfolio(
-        transfers,
-        prevPortfolio,
-      );
+      const transfers = this.parser.parseTransactionToTransfers(tx, traderAddress, tokens);
+      const portfolio = this.parser.parseTransfersToPortfolio(transfers, prevPortfolio);
 
       operations.push({
         txId: tx.id,
@@ -1218,7 +1038,7 @@ export class DownloaderService {
         portfolio: portfolio,
         traderId,
         operationType: this.parser.getOperationTypeByTransfer(transfers),
-        gasPaid: transfers.find((transfer) => transfer.isFee)?.amount || '0',
+        gasPaid: transfers.find((transfer) => transfer.isFee)?.amount || "0",
       });
 
       prevPortfolio = { ...portfolio };
@@ -1227,20 +1047,13 @@ export class DownloaderService {
     return operations;
   }
 
-  async getAssetTransfers(
-    address: string,
-    fromBlock: string,
-    category: string[],
-    accumulatedTransfers: any[] = [],
-    pageKeyFrom?: string,
-    pageKeyTo?: string,
-  ) {
+  async getAssetTransfers(address: string, fromBlock: string, category: string[], accumulatedTransfers: any[] = [], pageKeyFrom?: string, pageKeyTo?: string) {
     const generalParams = {
       fromBlock,
-      toBlock: 'latest',
+      toBlock: "latest",
       withMetadata: true,
       excludeZeroValue: false,
-      order: 'asc',
+      order: "asc",
       category,
     };
 
@@ -1248,73 +1061,50 @@ export class DownloaderService {
     const payloadFrom: any = { ...generalParams };
 
     if (pageKeyFrom) {
-      payloadFrom['pageKey'] = pageKeyFrom;
+      payloadFrom["pageKey"] = pageKeyFrom;
     }
 
     if (pageKeyTo) {
-      payloadTo['pageKey'] = pageKeyTo;
+      payloadTo["pageKey"] = pageKeyTo;
     }
 
     payloadTo.toAddress = address;
     payloadFrom.fromAddress = address;
 
     const [txsFrom, txsTo] = await Promise.all([
-      pageKeyFrom || accumulatedTransfers.length === 0
-        ? this.web3rpc.call('alchemy_getAssetTransfers', [payloadFrom])
-        : Promise.resolve(),
-      pageKeyTo || accumulatedTransfers.length === 0
-        ? this.web3rpc.call('alchemy_getAssetTransfers', [payloadTo])
-        : Promise.resolve(),
+      pageKeyFrom || accumulatedTransfers.length === 0 ? this.web3rpc.call("alchemy_getAssetTransfers", [payloadFrom]) : Promise.resolve(),
+      pageKeyTo || accumulatedTransfers.length === 0 ? this.web3rpc.call("alchemy_getAssetTransfers", [payloadTo]) : Promise.resolve(),
     ]);
 
     const transfersFrom = txsFrom?.result?.transfers || [];
     const transfersTo = txsTo?.result?.transfers || [];
 
     accumulatedTransfers.push(...transfersFrom, ...transfersTo);
-    this.logger.debug(
-      `Loaded accumulated transfers: ${accumulatedTransfers.length}`,
-    );
+    this.logger.debug(`Loaded accumulated transfers: ${accumulatedTransfers.length}`);
 
     if (txsFrom?.result?.pageKey || txsTo?.result?.pageKey) {
-      await this.getAssetTransfers(
-        address,
-        fromBlock,
-        category,
-        accumulatedTransfers,
-        txsFrom?.result?.pageKey,
-        txsTo?.result?.pageKey,
-      );
+      await this.getAssetTransfers(address, fromBlock, category, accumulatedTransfers, txsFrom?.result?.pageKey, txsTo?.result?.pageKey);
     }
 
     return accumulatedTransfers;
   }
 
-  getPools(
-    pools: Prisma.poolsGetPayload<any>[],
-    token: string,
-    to_block: number,
-  ): Prisma.poolsGetPayload<any>[] {
+  getPools(pools: Prisma.poolsGetPayload<any>[], token: string, to_block: number): Prisma.poolsGetPayload<any>[] {
     const result: Prisma.poolsGetPayload<any>[] = [];
 
     const [usdt, usdc, dai] = CONFIG.usdTokens;
     const usdtPools = pools.filter((pool) => {
-      const isTokensMatch =
-        (pool.token0 === token && pool.token1 === usdt) ||
-        (pool.token1 === token && pool.token0 === usdt);
+      const isTokensMatch = (pool.token0 === token && pool.token1 === usdt) || (pool.token1 === token && pool.token0 === usdt);
       return isTokensMatch && pool.createdAtBlock < to_block;
     });
 
     const usdcPools = pools.filter((pool) => {
-      const isTokensMatch =
-        (pool.token0 === token && pool.token1 === usdc) ||
-        (pool.token1 === token && pool.token0 === usdc);
+      const isTokensMatch = (pool.token0 === token && pool.token1 === usdc) || (pool.token1 === token && pool.token0 === usdc);
       return isTokensMatch && pool.createdAtBlock < to_block;
     });
 
     const daiPools = pools.filter((pool) => {
-      const isTokensMatch =
-        (pool.token0 === token && pool.token1 === dai) ||
-        (pool.token1 === token && pool.token0 === dai);
+      const isTokensMatch = (pool.token0 === token && pool.token1 === dai) || (pool.token1 === token && pool.token0 === dai);
       return isTokensMatch && pool.createdAtBlock < to_block;
     });
 
@@ -1322,19 +1112,13 @@ export class DownloaderService {
 
     const wethPools = pools.filter(
       (pool) =>
-        ((pool.token0 === token && pool.token1 === CONFIG.weth) ||
-          (pool.token1 === token && pool.token0 === CONFIG.weth)) &&
-        pool.createdAtBlock < to_block,
+        ((pool.token0 === token && pool.token1 === CONFIG.weth) || (pool.token1 === token && pool.token0 === CONFIG.weth)) && pool.createdAtBlock < to_block
     );
 
     const usdPools = [...usdtPools, ...usdcPools, ...daiPools];
-    const uniswapV2Priority = usdPools.filter(
-      (pool) => pool.dexName === DEX.UNISWAP_V2,
-    );
+    const uniswapV2Priority = usdPools.filter((pool) => pool.dexName === DEX.UNISWAP_V2);
 
-    const uniswapV2PriorityWeth = wethPools.filter(
-      (pool) => pool.dexName === DEX.UNISWAP_V2,
-    );
+    const uniswapV2PriorityWeth = wethPools.filter((pool) => pool.dexName === DEX.UNISWAP_V2);
 
     if (uniswapV2Priority.length > 1) {
       result.push(...uniswapV2Priority.slice(0, 2));

@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { ethers } from 'ethers-v6';
-import { CONFIG } from 'src/constants/config';
-import { NATIVE } from 'src/constants/names';
-import { DownloaderService } from 'src/downloader/downloader.service';
-import { Portfolio, PricedPortfolio } from 'src/downloader/types';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { ethers } from "ethers-v6";
+import { CONFIG } from "src/constants/config";
+import { NATIVE } from "src/constants/names";
+import { DownloaderService } from "src/downloader/downloader.service";
+import { Portfolio, PricedPortfolio } from "src/downloader/types";
+import { PrismaService } from "src/prisma/prisma.service";
 
 class Fund {
   shares: number;
@@ -68,25 +68,19 @@ class Fund {
       //   `WITHDRAW: ${amount}, ${sharesBurned}, ${sharePrice}, ${this.wapSell}`,
       // );
     } else {
-      throw Error('Cannot withdraw from empty fund');
+      throw Error("Cannot withdraw from empty fund");
     }
   }
 
   getWAPBuy() {
     const totalShares = this.deposits.reduce((acc, d) => acc + d.shares, 0);
-    const totalAmount = this.deposits.reduce(
-      (acc, d) => acc + d.shares * d.price,
-      0,
-    );
+    const totalAmount = this.deposits.reduce((acc, d) => acc + d.shares * d.price, 0);
     return totalAmount / totalShares;
   }
 
   getWAPSell() {
     const totalShares = this.withdrawals.reduce((acc, d) => acc + d.shares, 0);
-    const totalAmount = this.withdrawals.reduce(
-      (acc, d) => acc + d.shares * d.price,
-      0,
-    );
+    const totalAmount = this.withdrawals.reduce((acc, d) => acc + d.shares * d.price, 0);
     return totalAmount / totalShares;
   }
 
@@ -100,7 +94,7 @@ class Fund {
   }
 
   log() {
-    console.log('---');
+    console.log("---");
     console.log(this.getData());
   }
 
@@ -113,13 +107,9 @@ class Fund {
       wapBuy: this.wapBuy.toFixed(CONFIG.usdPrecision),
       wapSell: this.wapSell.toFixed(CONFIG.usdPrecision),
       realizedPnl: parseFloat(this.realizedPnl.toFixed(0)),
-      realizedPnlPercentage:
-        parseFloat(((this.wapSell / this.wapBuy - 1) * 100).toFixed(2)) * 100,
-      unrealizedPnl: parseFloat(
-        (this.tpv - this.shares * this.wapBuy).toFixed(0),
-      ),
-      unrealizedPnlPercentage:
-        parseFloat(((sharePrice / this.wapBuy - 1) * 100).toFixed(2)) * 100,
+      realizedPnlPercentage: parseFloat(((this.wapSell / this.wapBuy - 1) * 100).toFixed(2)) * 100,
+      unrealizedPnl: parseFloat((this.tpv - this.shares * this.wapBuy).toFixed(0)),
+      unrealizedPnlPercentage: parseFloat(((sharePrice / this.wapBuy - 1) * 100).toFixed(2)) * 100,
     };
   }
 }
@@ -140,10 +130,10 @@ type TokensWithIncludes = ({
 })[];
 
 @Injectable()
-export class TradersService {
+export class ApiService {
   constructor(
     private prisma: PrismaService,
-    private downloader: DownloaderService,
+    private downloader: DownloaderService
   ) {}
 
   async getTrader(address: string) {
@@ -185,12 +175,12 @@ export class TradersService {
         tokenId: CONFIG.weth,
       },
       orderBy: {
-        blockNumber: 'asc',
+        blockNumber: "asc",
       },
     });
 
     if (!firstPriceHistoryRecord) {
-      throw Error('No price history records found. Impossible to analyze');
+      throw Error("No price history records found. Impossible to analyze");
     }
 
     const operations = await this.prisma.operations.findMany({
@@ -207,7 +197,7 @@ export class TradersService {
           gte: firstPriceHistoryRecord.blockNumber,
         },
       },
-      orderBy: [{ blockNumber: 'asc' }, { transactionIndex: 'asc' }],
+      orderBy: [{ blockNumber: "asc" }, { transactionIndex: "asc" }],
     });
 
     if (operations.length > 0) {
@@ -230,7 +220,7 @@ export class TradersService {
         include: {
           prices: {
             orderBy: {
-              blockNumber: 'desc',
+              blockNumber: "desc",
             },
           },
         },
@@ -245,34 +235,19 @@ export class TradersService {
         const prevOperation = i === 0 ? null : operations[i - 1];
         const operation = operations[i];
         const portfolio = operation.portfolio as Portfolio;
-        const prevPortfolio = prevOperation
-          ? (prevOperation.portfolio as Portfolio)
-          : {};
+        const prevPortfolio = prevOperation ? (prevOperation.portfolio as Portfolio) : {};
         const { blockNumber, gasPaid } = operation;
-        //console.log(blockNumber, 'blockNumber');
-        //console.log(operation.transaction.hash, 'hash');
 
-        const dataBefore = this.getPricedPortfolio(
-          prevPortfolio,
-          tokens,
-          blockNumber,
-        );
-        const dataAfter = this.getPricedPortfolio(
-          portfolio,
-          tokens,
-          blockNumber,
-        );
+        const dataBefore = this.getPricedPortfolio(prevPortfolio, tokens, blockNumber);
+        const dataAfter = this.getPricedPortfolio(portfolio, tokens, blockNumber);
 
         const tpvBefore = dataBefore.tpv;
         const tpvAfter = dataAfter.tpv;
 
         const wethData = tokens.find((t) => t.id === CONFIG.weth);
-        const wethPrice =
-          wethData.prices.find((p) => p.blockNumber <= blockNumber)?.price ||
-          '0';
+        const wethPrice = wethData.prices.find((p) => p.blockNumber <= blockNumber)?.price || "0";
 
-        const gasPaidUsd =
-          parseFloat(ethers.formatEther(gasPaid)) * parseFloat(wethPrice);
+        const gasPaidUsd = parseFloat(ethers.formatEther(gasPaid)) * parseFloat(wethPrice);
         totalGasUsd += gasPaidUsd;
 
         if (fund.shares === 0 && tpvAfter > 0) {
@@ -295,32 +270,6 @@ export class TradersService {
           }
           fund.updateTpv(tpvAfter);
         }
-
-        //console.log(`Fund shares: ${fund.shares}, TPV: ${fund.tpv}`);
-
-        // if (i === 10) {
-        //   const filteredPortfolioBefore = {};
-        //   const filteredPortfolioAfter = {};
-
-        //   for (const token in dataBefore.portfolio) {
-        //     if (dataBefore.portfolio[token].value > 0) {
-        //       filteredPortfolioBefore[token] = dataBefore.portfolio[token];
-        //     }
-        //   }
-
-        //   for (const token in dataAfter.portfolio) {
-        //     if (dataAfter.portfolio[token].value > 0) {
-        //       filteredPortfolioAfter[token] = dataAfter.portfolio[token];
-        //     }
-        //   }
-        //   console.log(tpvBefore, 'tpvBefore');
-        //   console.log(filteredPortfolioBefore, 'filteredPortfolioBefore');
-        //   console.log(tpvAfter, 'tpvAfter');
-        //   console.log(filteredPortfolioAfter, 'filteredPortfolioAfter');
-        //   console.log(wethPrice, 'wethPrice');
-        //   console.log(fund.shares, 'fund shares');
-        //   break;
-        // }
       }
 
       fund.updateTpv(currentTpv);
@@ -332,11 +281,7 @@ export class TradersService {
     }
   }
 
-  getPricedPortfolio(
-    portfolio: Portfolio,
-    tokens: TokensWithIncludes,
-    blockNumber: number,
-  ): { tpv: number; portfolio: PricedPortfolio } {
+  getPricedPortfolio(portfolio: Portfolio, tokens: TokensWithIncludes, blockNumber: number): { tpv: number; portfolio: PricedPortfolio } {
     let tpv = 0;
     const pricedPortfolio: PricedPortfolio = {};
 
@@ -349,16 +294,13 @@ export class TradersService {
         throw Error(`Token ${tokenId} not found`);
       }
 
-      const price = CONFIG.usdTokens.includes(tokenId)
-        ? '1'
-        : tokenData.prices.find((p) => p.blockNumber <= blockNumber)?.price ||
-          '0';
+      const price = CONFIG.usdTokens.includes(tokenId) ? "1" : tokenData.prices.find((p) => p.blockNumber <= blockNumber)?.price || "0";
 
       const amountNumber = Number(ethers.formatUnits(amount, decimals));
       if (amountNumber < 0) {
-        console.log(token, 'token');
-        console.log(amountNumber, 'amountNumber');
-        throw Error('Negative amount');
+        console.log(token, "token");
+        console.log(amountNumber, "amountNumber");
+        throw Error("Negative amount");
       }
       const value = parseFloat(price) * amountNumber;
       tpv += value;
@@ -381,7 +323,7 @@ export class TradersService {
         },
       },
       orderBy: {
-        unrealizedPnl: 'desc',
+        unrealizedPnl: "desc",
       },
       take: count,
     });
@@ -399,7 +341,45 @@ export class TradersService {
     });
   }
 
+  async addScamToken(address: string) {
+    return await this.prisma.$transaction(async (trx) => {
+      await trx.scamTokens.create({
+        data: {
+          id: address,
+        },
+      });
+
+      const { count: pricesRemoved } = await trx.prices.deleteMany({
+        where: {
+          tokenId: address,
+        },
+      });
+
+      try {
+        await trx.tokensPools.delete({
+          where: {
+            id: address,
+          },
+        });
+
+        await trx.tokens.delete({
+          where: {
+            id: address,
+          },
+        });
+      } catch (e) {}
+
+      const { count: poolsRemoved } = await trx.pools.deleteMany({
+        where: {
+          OR: [{ token0: address }, { token1: address }],
+        },
+      });
+
+      return { pricesRemoved, poolsRemoved };
+    });
+  }
+
   async debug() {
-    return 'debug 3';
+    return "debug 3";
   }
 }
