@@ -343,11 +343,19 @@ export class ApiService {
 
   async addScamToken(address: string) {
     return await this.prisma.$transaction(async (trx) => {
-      await trx.scamTokens.create({
-        data: {
+      const scamToken = await trx.scamTokens.findUnique({
+        where: {
           id: address,
         },
       });
+
+      if (!scamToken) {
+        await trx.scamTokens.create({
+          data: {
+            id: address,
+          },
+        });
+      }
 
       const { count: pricesRemoved } = await trx.prices.deleteMany({
         where: {
@@ -367,7 +375,9 @@ export class ApiService {
             id: address,
           },
         });
-      } catch (e) {}
+      } catch (e) {
+        console.log(e)
+      }
 
       const { count: poolsRemoved } = await trx.pools.deleteMany({
         where: {

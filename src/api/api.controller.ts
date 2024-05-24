@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiService } from './api.service';
 
 @Controller('')
@@ -21,7 +22,7 @@ export class ApiController {
   }
 
   @Get('addScamToken')
-  addScamToken(@Query('address') address: string) {
+  async addScamToken(@Query('address') address: string) {
     return this.apiService.addScamToken(address.toLowerCase());
   }
 }

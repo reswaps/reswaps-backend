@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -8,6 +8,7 @@ import { DownloaderModule } from './downloader/downloader.module';
 import { ApiModule } from './api/api.module';
 import { ParserModule } from './parser/parser.module';
 import { Web3rpcModule } from './web3rpc/web3rpc.module';
+import { LoggerMiddleware } from './middlewares';
 
 @Module({
   imports: [
@@ -22,4 +23,8 @@ import { Web3rpcModule } from './web3rpc/web3rpc.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(LoggerMiddleware).forRoutes('*');
+  }
+}

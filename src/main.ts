@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { ValidationPipe } from "@nestjs/common";
+import { GlobalExceptionFilter } from "./filters";
 
 async function bootstrap() {
   BigInt.prototype["toJSON"] = function () {
@@ -13,6 +14,7 @@ async function bootstrap() {
       transform: true,
     })
   );
+  app.useGlobalFilters(new GlobalExceptionFilter());
   await app.listen(3000);
 }
 bootstrap();
