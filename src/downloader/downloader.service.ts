@@ -33,7 +33,7 @@ export class DownloaderService {
       await this.syncPools(dex);
     }
     await this.syncTokens();
-    await this.syncLiquidity(24);
+    //await this.syncLiquidity(24);
     await this.syncBestTokensPools();
     await this.syncHistoricalPrices();
   }
@@ -686,7 +686,7 @@ export class DownloaderService {
         await this.deletePools(fails);
       } else {
         const newSize = Math.ceil(size / 2);
-        this.logger.log(`Retrying ${fails.length} tokens with size ${newSize}`);
+        this.logger.log(`Retrying ${fails.length} v3 pools with size ${newSize}`);
         await this.loadV3Liquidity(fails, decimalsMap, wethPrice, newSize);
       }
     }
@@ -752,7 +752,7 @@ export class DownloaderService {
         await this.deletePoolsWithFailedTokens(fails);
       } else {
         const newSize = Math.ceil(size / 2);
-        this.logger.log(`Retrying ${fails.length} tokens with size ${newSize}`);
+        this.logger.log(`Retrying ${fails.length} pools with size ${newSize}`);
         this.loadTokens(fails, newSize);
       }
     }
