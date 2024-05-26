@@ -56,3 +56,7 @@ export const findNextBlock = (block: number, orderedBlocks: number[]) => {
   const index = orderedBlocks.findIndex((b) => b >= block);
   return orderedBlocks[index];
 }
+
+export function sleep(seconds: number) {
+  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
+}

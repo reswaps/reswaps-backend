@@ -5,6 +5,7 @@ import { ContractEventName, DeferredTopicFilter, Contract, ethers, JsonRpcProvid
 import { ethers as ethersv5 } from 'ethers';
 import { CONFIG } from 'src/constants/config';
 import { CHAIN_IDS } from 'src/constants/names';
+import { sleep } from '@lib/common';
 
 @Injectable()
 export class Web3rpcService {
@@ -49,6 +50,7 @@ export class Web3rpcService {
     this.provider = this.providers[nextIndex];
     this.v5provider = this.v5providers[nextIndex];
     this.url = this.urls[nextIndex];
+    this.logger.log(`Switched to provider: ${this.url}`);
   }
 
   async batchCall(
@@ -103,6 +105,7 @@ export class Web3rpcService {
         this.logger.error(error?.message);
         this.logger.debug(`Retrying call ${times} times`);
         this.changeProvider();
+        await sleep(times);
         return await this.reTryCall(callback, times - 1);
       } else {
         throw error;
