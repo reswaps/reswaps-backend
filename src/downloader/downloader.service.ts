@@ -29,13 +29,13 @@ export class DownloaderService {
 
   @Cron(CronExpression.EVERY_12_HOURS)
   async syncPoolsAndTokens() {
-    // for (const dex of CONFIG.dexes) {
-    //   await this.syncPools(dex);
-    // }
-    // await this.syncTokens();
-    // await this.syncLiquidity(12);
-    // await this.syncBestTokensPools();
-    // await this.syncHistoricalPrices();
+    for (const dex of CONFIG.dexes) {
+      await this.syncPools(dex);
+    }
+    await this.syncTokens();
+    await this.syncLiquidity(24);
+    await this.syncBestTokensPools();
+    await this.syncHistoricalPrices();
   }
 
   async syncPools(dex: (typeof CONFIG.dexes)[number]) {

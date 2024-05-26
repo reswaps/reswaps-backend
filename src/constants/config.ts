@@ -13,7 +13,6 @@ export const CONFIG = {
     '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
     '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
   ],
-  wethUsdtPool: '0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852',
   multicallAbi: multicall_abi,
   usdPrecision: 6,
   batchCallLimit: 1000,
