@@ -68,7 +68,7 @@ export class DownloaderService {
       const intervalBatch = intervals.slice(i, i + batchSize);
       const resultBatch = await Promise.all(
         intervalBatch.map((interval) => {
-          return Factory.queryFilter(filter, interval[0], interval[1]);
+          return this.web3rpc.queryFilterWithRetry(Factory, filter, interval[0], interval[1]);
         })
       );
       const data = [];

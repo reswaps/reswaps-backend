@@ -4,7 +4,7 @@ export const getBlockIntervals = (
   step: number,
 ) => {
   const loopCnt = Math.ceil((stop - start) / step);
-  const intervals = [];
+  const intervals: number[][] = [];
   for (let i = 0; i < loopCnt; i++) {
     const fromBlock = start + i * step;
     const toBlock = Math.min(fromBlock + step, stop);

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { ethers, JsonRpcProvider } from 'ethers-v6';
+import { ContractEventName, DeferredTopicFilter, Contract, ethers, JsonRpcProvider } from 'ethers-v6';
 import { ethers as ethersv5 } from 'ethers';
 import { CONFIG } from 'src/constants/config';
 import { CHAIN_IDS } from 'src/constants/names';
@@ -196,6 +196,12 @@ export class Web3rpcService {
   async multiCallWithRetry(targets, ABI, methodName, args = [], everyArg) {
     return await this.reTryCall(() =>
       this.multicall(targets, ABI, methodName, args, everyArg),
+    );
+  }
+
+  async queryFilterWithRetry(contract: Contract, filter: DeferredTopicFilter, fromBlock: number, toBlock: number) {
+    return await this.reTryCall(() =>
+      contract.queryFilter(filter, fromBlock, toBlock),
     );
   }
 }
