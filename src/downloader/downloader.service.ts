@@ -711,7 +711,7 @@ export class DownloaderService {
 
     if (tokenAddresses.length > 0) {
       this.logger.log(`Loading ${tokenAddresses.length} new tokens`);
-      await this.loadTokens(tokenAddresses, 500);
+      await this.loadTokens(tokenAddresses, 1000);
     }
   }
 
