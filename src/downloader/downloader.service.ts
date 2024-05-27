@@ -29,12 +29,12 @@ export class DownloaderService {
 
   @Cron(CronExpression.EVERY_12_HOURS)
   async syncPoolsAndTokens() {
-    for (const dex of CONFIG.dexes) {
-      await this.syncPools(dex);
-    }
-    await this.syncTokens();
+    // for (const dex of CONFIG.dexes) {
+    //   await this.syncPools(dex);
+    // }
+    // await this.syncTokens();
     //await this.syncLiquidity(24);
-    await this.syncBestTokensPools();
+    //await this.syncBestTokensPools();
     await this.syncHistoricalPrices();
   }
 
@@ -221,6 +221,7 @@ export class DownloaderService {
   }
 
   async syncHistoricalPrices() {
+    this.logger.log('start loading historical prices');
     const [tokensPools, latestBlock] = await Promise.all([
       this.prisma.$queryRaw<
         {
@@ -247,6 +248,7 @@ export class DownloaderService {
       "blockNumber" DESC) as recent_price ON tp.id = recent_price."tokenId";`,
       this.web3rpc.provider.getBlockNumber(),
     ]);
+    this.logger.log(`Loaded ${tokensPools.length} tokens pools`);
 
     const wethUsdPool = tokensPools.find((tp) => {
       const isUsdPool = this.parser.isUsdPool(tp);

@@ -14,7 +14,7 @@ export const CONFIG = {
     '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
   ],
   multicallAbi: multicall_abi,
-  usdPrecision: 6,
+  usdPrecision: 10,
   batchCallLimit: 1000,
   multicallLimit: 1000,
   avgBlockTimeSeconds: 13.7,
