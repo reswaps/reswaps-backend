@@ -32,4 +32,4 @@ jobs:
           source ~/.nvm/nvm.sh
           npm ci
           npm run build
-          pm2 reload reswaps-backend
+          pm2 reload reswaps-backend --node-args="--max-old-space-size=6144"
