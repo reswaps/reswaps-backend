@@ -27,7 +27,7 @@ export class DownloaderService {
     private readonly configService: ConfigService
   ) {}
 
-  @Cron(CronExpression.EVERY_12_HOURS)
+  @Cron(CronExpression.EVERY_HOUR)
   async syncPoolsAndTokens() {
     // for (const dex of CONFIG.dexes) {
     //   await this.syncPools(dex);
