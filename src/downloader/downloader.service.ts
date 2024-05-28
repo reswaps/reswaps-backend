@@ -237,15 +237,18 @@ export class DownloaderService {
           dexName: string;
         }[]
       >`SELECT tp.*,recent_price.price,recent_price."blockNumber" as "lastPriceBlockNumber", pools."createdAtBlock", pools."dexName" from "tokensPools" tp JOIN pools ON pools.id = tp."poolId" 
-      LEFT JOIN (SELECT DISTINCT ON ("tokenId")
-      "tokenId",
-      price,
-      "blockNumber"
-      FROM
-      prices
-      ORDER BY
-      "tokenId",
-      "blockNumber" DESC) as recent_price ON tp.id = recent_price."tokenId";`,
+      LEFT JOIN (SELECT "tokenId", p.price, p."blockNumber"
+FROM (
+    SELECT DISTINCT "tokenId"
+    FROM prices
+) AS distinct_tokens
+JOIN LATERAL (
+    SELECT price, "blockNumber"
+    FROM prices
+    WHERE prices."tokenId" = distinct_tokens."tokenId"
+    ORDER BY "blockNumber" DESC
+    LIMIT 1
+) AS p ON true) as recent_price ON tp.id = recent_price."tokenId";`,
       this.web3rpc.provider.getBlockNumber(),
     ]);
     this.logger.log(`Loaded ${tokensPools.length} tokens pools`);

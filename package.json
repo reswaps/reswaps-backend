@@ -26,7 +26,7 @@
     "@nestjs/mapped-types": "*",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.0.2",
-    "@reswaps/prisma": "^1.0.202405280213",
+    "@reswaps/prisma": "^1.0.202405280235",
     "@thanpolas/univ3prices": "^3.0.2",
     "alchemy-sdk": "^3.3.1",
     "axios": "^1.6.8",
